@@ -6,9 +6,11 @@ import { HealthModule } from './health/health.module';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { MembershipsModule } from './memberships/memberships.module';
+import { ContributionsModule } from './contributions/contributions.module';
 import { Membership } from './memberships/entities/membership.entity';
 import { Group } from './groups/entities/group.entity';
 import { User } from './users/entities/user.entity';
+import { Contribution } from './contributions/entities/contribution.entity';
 
 @Module({
   imports: [
@@ -17,7 +19,7 @@ import { User } from './users/entities/user.entity';
     TypeOrmModule.forRoot({
       type: 'sqlite',
       database: ':memory:', // In-memory database for development
-      entities: [Membership, Group, User],
+      entities: [Membership, Group, User, Contribution],
       synchronize: true, // Auto-create tables (disable in production)
       logging: false,
     }),
@@ -25,6 +27,7 @@ import { User } from './users/entities/user.entity';
     AuthModule,
     UsersModule,
     MembershipsModule,
+    ContributionsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
