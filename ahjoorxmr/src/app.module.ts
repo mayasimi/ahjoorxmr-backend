@@ -16,10 +16,12 @@ import { User } from './users/entities/user.entity';
     // For production, replace with PostgreSQL configuration using environment variables
     TypeOrmModule.forRoot({
       type: 'sqlite',
-      database: ':memory:', // In-memory database for development
+      database: 'database.sqlite', // File-based database (matches typeorm.config.ts)
       entities: [Membership, Group, User],
-      synchronize: true, // Auto-create tables (disable in production)
+      synchronize: false, // NEVER use synchronize in production - use migrations instead
       logging: false,
+      // Run migrations automatically on app startup (optional - remove in production)
+      migrationsRun: process.env.NODE_ENV !== 'production',
     }),
     HealthModule,
     AuthModule,
