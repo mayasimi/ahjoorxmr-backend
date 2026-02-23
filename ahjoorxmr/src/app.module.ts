@@ -9,6 +9,7 @@ import { UsersModule } from './users/users.module';
 import { GroupsModule } from './groups/groups.module';
 import { MembershipsModule } from './memberships/memberships.module';
 import { ContributionsModule } from './contributions/contributions.module';
+import { RedisModule } from './common/redis/redis.module';
 import { Membership } from './memberships/entities/membership.entity';
 import { Group } from './groups/entities/group.entity';
 import { User } from './users/entities/user.entity';
@@ -18,6 +19,21 @@ import { EventListenerModule } from './event-listener/event-listener.module';
 
 @Module({
   imports: [
+
+    // ConfigModule must be first to make environment variables available
+    ConfigModule.forRoot({
+      isGlobal: true,
+      envFilePath: '.env',
+    }),
+    // TypeORM configuration with SQLite for development
+    // For production, replace with PostgreSQL configuration using environment variables
+    TypeOrmModule.forRoot({
+      type: 'sqlite',
+      database: ':memory:', // In-memory database for development
+      entities: [Membership, Group, User, Contribution],
+      synchronize: true, // Auto-create tables (disable in production)
+      logging: false,
+=======
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: '.env',
@@ -46,6 +62,8 @@ import { EventListenerModule } from './event-listener/event-listener.module';
       },
       inject: [ConfigService],
     }),
+    // RedisModule for caching and session management
+    RedisModule,
     HealthModule,
     AuthModule,
     UsersModule,
