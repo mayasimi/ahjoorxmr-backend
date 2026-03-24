@@ -4,6 +4,7 @@ import { DistributedLockService } from './services/distributed-lock.service';
 import { AuditLogService } from './services/audit-log.service';
 import { ContributionSummaryService } from './services/contribution-summary.service';
 import { GroupStatusService } from './services/group-status.service';
+import { StaleGroupDetectionService } from './services/stale-group-detection.service';
 
 @Injectable()
 export class SchedulerService {
@@ -16,6 +17,7 @@ export class SchedulerService {
     private readonly auditLogService: AuditLogService,
     private readonly contributionSummaryService: ContributionSummaryService,
     private readonly groupStatusService: GroupStatusService,
+    private readonly staleGroupDetectionService: StaleGroupDetectionService,
   ) {}
 
   /**
@@ -127,6 +129,41 @@ export class SchedulerService {
     if (result) {
       this.logger.log(
         `Task ${taskName} completed successfully in ${duration}ms. Updated ${result.updatedCount} groups, found ${result.inactiveGroupCount} inactive groups.`,
+      );
+    } else {
+      this.logger.warn(`Task ${taskName} was skipped (lock not acquired)`);
+    }
+  }
+
+  /**
+   * Daily task: Detect and flag stale groups (runs at 3 AM)
+   */
+  @Cron(CronExpression.EVERY_DAY_AT_3AM, {
+    name: 'detect-stale-groups',
+  })
+  async handleStaleGroupDetection(): Promise<void> {
+    const taskName = 'detect-stale-groups';
+    const startTime = Date.now();
+
+    this.logger.log(`Starting task: ${taskName}`);
+
+    const result = await this.lockService.withLock(
+      taskName,
+      async () => {
+        return await this.executeWithRetry(async () => {
+          const flaggedCount =
+            await this.staleGroupDetectionService.detectAndFlagStaleGroups();
+          return { flaggedCount };
+        }, taskName);
+      },
+      600, // 10 minutes lock TTL
+    );
+
+    const duration = Date.now() - startTime;
+
+    if (result) {
+      this.logger.log(
+        `Task ${taskName} completed successfully in ${duration}ms. Flagged ${result.flaggedCount} stale group(s).`,
       );
     } else {
       this.logger.warn(`Task ${taskName} was skipped (lock not acquired)`);

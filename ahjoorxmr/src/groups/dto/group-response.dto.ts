@@ -84,6 +84,13 @@ export class GroupResponseDto {
   updatedAt: string;
 
   @ApiPropertyOptional({
+    description: 'Timestamp when the group was flagged as stale (ISO 8601)',
+    example: '2024-01-15T00:00:00.000Z',
+    nullable: true,
+  })
+  staleAt?: string | null;
+
+  @ApiPropertyOptional({
     description: 'List of group members (only included for GET /:id endpoint)',
     type: [MembershipResponseDto],
   })
