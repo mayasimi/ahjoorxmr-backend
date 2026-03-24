@@ -15,7 +15,7 @@ export class AuthService {
     private readonly usersService: UsersService,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
-  ) {}
+  ) { }
 
   async register(registerDto: RegisterDto) {
     const { email, password, firstName, lastName } = registerDto;
@@ -79,13 +79,19 @@ export class AuthService {
       user.refreshTokenHash,
     );
     if (!isRefreshTokenValid) {
+      // Token theft detected - revoke all sessions
+      await this.usersService.revokeAllSessions(userId);
       throw new UnauthorizedException('Access Denied');
     }
+
+    // Increment token version for rotation
+    const newTokenVersion = await this.usersService.incrementTokenVersion(userId);
 
     const tokens = await this.generateTokens(
       user.id,
       user.email || '',
       user.role,
+      newTokenVersion,
     );
     await this.updateRefreshToken(user.id, tokens.refreshToken);
 
@@ -108,10 +114,13 @@ export class AuthService {
     return bcrypt.compare(password, hash);
   }
 
-  private async generateTokens(userId: string, email: string, role: string) {
+  private async generateTokens(userId: string, email: string, role: string, tokenVersion?: number) {
+    const user = await this.usersService.findById(userId);
+    const version = tokenVersion ?? user.tokenVersion ?? 0;
+
     const [accessToken, refreshToken] = await Promise.all([
       this.jwtService.signAsync(
-        { sub: userId, email, role },
+        { sub: userId, email, role, tokenVersion: version },
         {
           secret:
             this.configService.get<string>('JWT_ACCESS_SECRET') ||
@@ -120,7 +129,7 @@ export class AuthService {
         },
       ),
       this.jwtService.signAsync(
-        { sub: userId, email, role },
+        { sub: userId, email, role, tokenVersion: version },
         {
           secret:
             this.configService.get<string>('JWT_REFRESH_SECRET') ||
@@ -139,5 +148,9 @@ export class AuthService {
   async updateRefreshToken(userId: string, refreshToken: string) {
     const hash = await this.hashPassword(refreshToken);
     await this.usersService.updateRefreshToken(userId, hash);
+  }
+
+  async logout(userId: string): Promise<void> {
+    await this.usersService.revokeAllSessions(userId);
   }
 }
