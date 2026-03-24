@@ -34,6 +34,9 @@ export class User extends BaseEntity {
   @Column({ type: 'varchar', length: 255, nullable: true })
   refreshTokenHash?: string | null;
 
+  @Column({ type: 'integer', default: 0 })
+  tokenVersion: number;
+
   // Two-Factor Authentication
   @Column({ type: 'varchar', length: 255, nullable: true })
   twoFactorSecret?: string | null;
