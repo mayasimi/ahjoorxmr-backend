@@ -6,6 +6,7 @@ import { ConfigService } from '@nestjs/config';
 import { ContributionsService } from '../contributions.service';
 import { Contribution } from '../entities/contribution.entity';
 import { Group } from '../../groups/entities/group.entity';
+import { GroupStatus } from '../../groups/entities/group-status.enum';
 import { StellarService } from '../../stellar/stellar.service';
 import { WinstonLogger } from '../../common/logger/winston.logger';
 import { CreateContributionDto } from '../dto/create-contribution.dto';
@@ -95,7 +96,11 @@ describe('ContributionsService', () => {
   describe('createContribution', () => {
     it('should create a contribution when verification is disabled', async () => {
       configService.get!.mockReturnValue(false); // VERIFY_CONTRIBUTIONS = false
-      groupRepository.findOne!.mockResolvedValue({ id: 'group-1' });
+      groupRepository.findOne!.mockResolvedValue({
+        id: 'group-1',
+        status: GroupStatus.ACTIVE,
+        currentRound: 1,
+      });
       contributionRepository.findOne!.mockResolvedValue(null); // No duplicate hash
       contributionRepository.create!.mockReturnValue(mockContribution);
       contributionRepository.save!.mockResolvedValue(mockContribution);
@@ -110,7 +115,11 @@ describe('ContributionsService', () => {
     it('should create a contribution when verification is enabled and successful', async () => {
       configService.get!.mockReturnValue(true); // VERIFY_CONTRIBUTIONS = true
       stellarService.verifyContribution!.mockResolvedValue(true);
-      groupRepository.findOne!.mockResolvedValue({ id: 'group-1' });
+      groupRepository.findOne!.mockResolvedValue({
+        id: 'group-1',
+        status: GroupStatus.ACTIVE,
+        currentRound: 1,
+      });
       contributionRepository.findOne!.mockResolvedValue(null);
       contributionRepository.create!.mockReturnValue(mockContribution);
       contributionRepository.save!.mockResolvedValue(mockContribution);
@@ -125,7 +134,11 @@ describe('ContributionsService', () => {
     it('should throw BadRequestException when verification fails', async () => {
       configService.get!.mockReturnValue(true);
       stellarService.verifyContribution!.mockResolvedValue(false);
-      groupRepository.findOne!.mockResolvedValue({ id: 'group-1' });
+      groupRepository.findOne!.mockResolvedValue({
+        id: 'group-1',
+        status: GroupStatus.ACTIVE,
+        currentRound: 1,
+      });
 
       await expect(
         service.createContribution(createContributionDto),
@@ -136,7 +149,11 @@ describe('ContributionsService', () => {
     it('should throw ConflictException when transaction hash already exists', async () => {
       configService.get!.mockReturnValue(true);
       stellarService.verifyContribution!.mockResolvedValue(true);
-      groupRepository.findOne!.mockResolvedValue({ id: 'group-1' });
+      groupRepository.findOne!.mockResolvedValue({
+        id: 'group-1',
+        status: GroupStatus.ACTIVE,
+        currentRound: 1,
+      });
       contributionRepository.findOne!.mockResolvedValue(mockContribution);
 
       await expect(
@@ -156,6 +173,8 @@ describe('ContributionsService', () => {
     it('should use group contractAddress when available', async () => {
       const groupWithContract = {
         id: 'group-1',
+        status: GroupStatus.ACTIVE,
+        currentRound: 1,
         contractAddress:
           'CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4',
       };
@@ -179,6 +198,8 @@ describe('ContributionsService', () => {
     it('should fall back to global contract address when group contractAddress is null', async () => {
       const groupWithoutContract = {
         id: 'group-1',
+        status: GroupStatus.ACTIVE,
+        currentRound: 1,
         contractAddress: null,
       };
       configService.get!.mockReturnValue(true);
@@ -205,6 +226,8 @@ describe('ContributionsService', () => {
     it('should throw BadRequestException when verification fails against group contract', async () => {
       const groupWithContract = {
         id: 'group-1',
+        status: GroupStatus.ACTIVE,
+        currentRound: 1,
         contractAddress:
           'CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABSC4',
       };
@@ -221,6 +244,8 @@ describe('ContributionsService', () => {
     it('should throw BadRequestException when verification fails against global contract', async () => {
       const groupWithoutContract = {
         id: 'group-1',
+        status: GroupStatus.ACTIVE,
+        currentRound: 1,
         contractAddress: null,
       };
       configService.get!.mockReturnValue(true);
@@ -231,6 +256,162 @@ describe('ContributionsService', () => {
         service.createContribution(createContributionDto),
       ).rejects.toThrow(BadRequestException);
       expect(contributionRepository.save).not.toHaveBeenCalled();
+    });
+
+    // -------------------------------------------------------------------------
+    // Round Number Validation Tests
+    // -------------------------------------------------------------------------
+
+    it('should throw BadRequestException when contribution is for a future round', async () => {
+      const futureRoundDto: CreateContributionDto = {
+        ...createContributionDto,
+        roundNumber: 5, // Future round
+      };
+      const group = {
+        id: 'group-1',
+        status: GroupStatus.ACTIVE,
+        currentRound: 1, // Current round is 1
+      };
+
+      configService.get!.mockReturnValue(false);
+      groupRepository.findOne!.mockResolvedValue(group);
+
+      await expect(service.createContribution(futureRoundDto)).rejects.toThrow(
+        BadRequestException,
+      );
+      await expect(service.createContribution(futureRoundDto)).rejects.toThrow(
+        'Contributions can only be made for the current round',
+      );
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Round number mismatch'),
+        'ContributionsService',
+      );
+      expect(contributionRepository.save).not.toHaveBeenCalled();
+    });
+
+    it('should throw BadRequestException when contribution is for a past round', async () => {
+      const pastRoundDto: CreateContributionDto = {
+        ...createContributionDto,
+        roundNumber: 1, // Past round
+      };
+      const group = {
+        id: 'group-1',
+        status: GroupStatus.ACTIVE,
+        currentRound: 5, // Current round is 5
+      };
+
+      configService.get!.mockReturnValue(false);
+      groupRepository.findOne!.mockResolvedValue(group);
+
+      await expect(service.createContribution(pastRoundDto)).rejects.toThrow(
+        BadRequestException,
+      );
+      await expect(service.createContribution(pastRoundDto)).rejects.toThrow(
+        'Contributions can only be made for the current round',
+      );
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Round number mismatch'),
+        'ContributionsService',
+      );
+      expect(contributionRepository.save).not.toHaveBeenCalled();
+    });
+
+    it('should succeed when roundNumber matches group currentRound', async () => {
+      const correctRoundDto: CreateContributionDto = {
+        ...createContributionDto,
+        roundNumber: 3,
+      };
+      const group = {
+        id: 'group-1',
+        status: GroupStatus.ACTIVE,
+        currentRound: 3, // Matches the DTO
+      };
+
+      configService.get!.mockReturnValue(false);
+      groupRepository.findOne!.mockResolvedValue(group);
+      contributionRepository.findOne!.mockResolvedValue(null);
+      contributionRepository.create!.mockReturnValue({
+        ...mockContribution,
+        roundNumber: 3,
+      });
+      contributionRepository.save!.mockResolvedValue({
+        ...mockContribution,
+        roundNumber: 3,
+      });
+
+      const result = await service.createContribution(correctRoundDto);
+
+      expect(result.roundNumber).toBe(3);
+      expect(contributionRepository.save).toHaveBeenCalled();
+    });
+
+    // -------------------------------------------------------------------------
+    // Group Status Validation Tests
+    // -------------------------------------------------------------------------
+
+    it('should throw BadRequestException when group status is PENDING', async () => {
+      const group = {
+        id: 'group-1',
+        status: GroupStatus.PENDING,
+        currentRound: 0,
+      };
+
+      configService.get!.mockReturnValue(false);
+      groupRepository.findOne!.mockResolvedValue(group);
+
+      await expect(
+        service.createContribution(createContributionDto),
+      ).rejects.toThrow(BadRequestException);
+      await expect(
+        service.createContribution(createContributionDto),
+      ).rejects.toThrow('Contributions can only be made to ACTIVE groups');
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Cannot create contribution'),
+        'ContributionsService',
+      );
+      expect(contributionRepository.save).not.toHaveBeenCalled();
+    });
+
+    it('should throw BadRequestException when group status is COMPLETED', async () => {
+      const group = {
+        id: 'group-1',
+        status: GroupStatus.COMPLETED,
+        currentRound: 10,
+      };
+
+      configService.get!.mockReturnValue(false);
+      groupRepository.findOne!.mockResolvedValue(group);
+
+      await expect(
+        service.createContribution(createContributionDto),
+      ).rejects.toThrow(BadRequestException);
+      await expect(
+        service.createContribution(createContributionDto),
+      ).rejects.toThrow('Contributions can only be made to ACTIVE groups');
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('Cannot create contribution'),
+        'ContributionsService',
+      );
+      expect(contributionRepository.save).not.toHaveBeenCalled();
+    });
+
+    it('should succeed when group status is ACTIVE and round matches', async () => {
+      const group = {
+        id: 'group-1',
+        status: GroupStatus.ACTIVE,
+        currentRound: 1,
+      };
+
+      configService.get!.mockReturnValue(false);
+      groupRepository.findOne!.mockResolvedValue(group);
+      contributionRepository.findOne!.mockResolvedValue(null);
+      contributionRepository.create!.mockReturnValue(mockContribution);
+      contributionRepository.save!.mockResolvedValue(mockContribution);
+
+      const result = await service.createContribution(createContributionDto);
+
+      expect(result).toEqual(mockContribution);
+      expect(contributionRepository.save).toHaveBeenCalled();
     });
   });
 

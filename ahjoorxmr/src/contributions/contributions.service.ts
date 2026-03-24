@@ -7,6 +7,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, QueryFailedError } from 'typeorm';
 import { Contribution } from './entities/contribution.entity';
 import { Group } from '../groups/entities/group.entity';
+import { GroupStatus } from '../groups/entities/group-status.enum';
 import { WinstonLogger } from '../common/logger/winston.logger';
 import { CreateContributionDto } from './dto/create-contribution.dto';
 import { StellarService } from '../stellar/stellar.service';
@@ -53,17 +54,19 @@ export class ContributionsService {
   /**
    * Creates a new contribution record.
    * Validates that the group and user exist, checks for duplicate transaction hash,
+   * validates round number matches current round, validates group is ACTIVE,
    * and creates the contribution record.
    *
    * @param createContributionDto - The contribution data
    * @returns The created Contribution entity
-   * @throws BadRequestException if the group or user doesn't exist
+   * @throws BadRequestException if the group or user doesn't exist, round number is invalid, or group is not ACTIVE
    * @throws ConflictException if the transaction hash already exists
    */
   async createContribution(
     createContributionDto: CreateContributionDto,
   ): Promise<Contribution> {
-    const { groupId, userId, transactionHash } = createContributionDto;
+    const { groupId, userId, transactionHash, roundNumber } =
+      createContributionDto;
 
     this.logger.log(
       `Creating contribution for user ${userId} in group ${groupId} with transaction hash ${transactionHash}`,
@@ -73,6 +76,28 @@ export class ContributionsService {
     try {
       // Validate group exists and fetch it
       const group = await this.validateGroupExists(groupId);
+
+      // Validate group status is ACTIVE
+      if (group.status !== GroupStatus.ACTIVE) {
+        this.logger.warn(
+          `Cannot create contribution for group ${groupId} with status ${group.status}`,
+          'ContributionsService',
+        );
+        throw new BadRequestException(
+          'Contributions can only be made to ACTIVE groups',
+        );
+      }
+
+      // Validate round number matches current round
+      if (roundNumber !== group.currentRound) {
+        this.logger.warn(
+          `Round number mismatch for group ${groupId}: provided ${roundNumber}, current ${group.currentRound}`,
+          'ContributionsService',
+        );
+        throw new BadRequestException(
+          'Contributions can only be made for the current round',
+        );
+      }
 
       // Verify contribution if enabled
       const shouldVerify = this.configService.get<boolean>(
