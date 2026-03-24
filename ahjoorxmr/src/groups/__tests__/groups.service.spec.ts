@@ -40,6 +40,7 @@ const createMockGroup = (overrides: Partial<Group> = {}): Group => ({
   currentRound: 0,
   totalRounds: 10,
   minMembers: 3,
+  staleAt: null,
   memberships: [],
   createdAt: new Date('2024-01-01T00:00:00Z'),
   updatedAt: new Date('2024-01-01T00:00:00Z'),
@@ -312,6 +313,31 @@ describe('GroupsService', () => {
 
       await expect(service.findAll()).rejects.toThrow('DB error');
       expect(logger.error).toHaveBeenCalled();
+    });
+
+    it('should filter stale groups when filter=stale', async () => {
+      const staleGroup = createMockGroup({
+        id: 'stale-1',
+        staleAt: new Date('2024-01-15'),
+      });
+      groupRepository.findAndCount!.mockResolvedValue([[staleGroup], 1]);
+
+      const result = await service.findAll(1, 10, false, 'stale');
+
+      expect(result.data).toHaveLength(1);
+      expect(result.data[0].staleAt).toBeTruthy();
+    });
+
+    it('should not filter when no filter is provided', async () => {
+      const groups = [
+        createMockGroup({ id: 'group-1', staleAt: null }),
+        createMockGroup({ id: 'group-2', staleAt: new Date() }),
+      ];
+      groupRepository.findAndCount!.mockResolvedValue([groups, 2]);
+
+      const result = await service.findAll(1, 10, false);
+
+      expect(result.data).toHaveLength(2);
     });
   });
 
@@ -890,6 +916,66 @@ describe('GroupsService', () => {
           userId: 'user-2',
           type: 'round_opened',
         }),
+      );
+    });
+
+    it('should clear staleAt flag when advancing round', async () => {
+      const mockGroup = createMockGroup({
+        status: GroupStatus.ACTIVE,
+        currentRound: 1,
+        totalRounds: 5,
+        staleAt: new Date('2024-01-15'),
+        memberships: [
+          createMockMembership({
+            hasPaidCurrentRound: true,
+          }),
+        ],
+      });
+
+      const clearedGroup = { ...mockGroup, currentRound: 2, staleAt: null };
+      groupRepository.findOne!.mockResolvedValue(mockGroup);
+      membershipRepository.save!.mockResolvedValue({} as any);
+      groupRepository.save!.mockResolvedValue(clearedGroup as Group);
+
+      const result = await service.advanceRound(groupId, adminWallet);
+
+      expect(groupRepository.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          staleAt: null,
+        }),
+      );
+      expect(result.staleAt).toBeNull();
+      expect(logger.log).toHaveBeenCalledWith(
+        expect.stringContaining('Cleared stale flag'),
+        'GroupsService',
+      );
+    });
+
+    it('should not log stale flag clearing if group was not stale', async () => {
+      const mockGroup = createMockGroup({
+        status: GroupStatus.ACTIVE,
+        currentRound: 1,
+        totalRounds: 5,
+        staleAt: null,
+        memberships: [
+          createMockMembership({
+            hasPaidCurrentRound: true,
+          }),
+        ],
+      });
+
+      groupRepository.findOne!.mockResolvedValue(mockGroup);
+      membershipRepository.save!.mockResolvedValue({} as any);
+      groupRepository.save!.mockResolvedValue({
+        ...mockGroup,
+        currentRound: 2,
+      } as Group);
+
+      await service.advanceRound(groupId, adminWallet);
+
+      expect(logger.log).not.toHaveBeenCalledWith(
+        expect.stringContaining('Cleared stale flag'),
+        'GroupsService',
       );
     });
   });

@@ -84,15 +84,17 @@ export class GroupsService {
    * @param page - Page number (1-indexed)
    * @param limit - Number of items per page
    * @param includeArchived - Whether to include soft-deleted groups
+   * @param filter - Optional filter: 'stale' to return only stale groups
    * @returns Paginated result with data, total count, page, and limit
    */
   async findAll(
     page: number = 1,
     limit: number = 10,
     includeArchived: boolean = false,
+    filter?: string,
   ): Promise<{ data: Group[]; total: number; page: number; limit: number }> {
     this.logger.log(
-      `Fetching groups page=${page} limit=${limit} includeArchived=${includeArchived}`,
+      `Fetching groups page=${page} limit=${limit} includeArchived=${includeArchived} filter=${filter}`,
       'GroupsService',
     );
 
@@ -107,6 +109,11 @@ export class GroupsService {
 
       if (includeArchived) {
         qb.withDeleted();
+      }
+
+      // Apply stale filter if requested
+      if (filter === 'stale') {
+        qb.andWhere('group.staleAt IS NOT NULL');
       }
 
       const [data, total] = await qb.getManyAndCount();
@@ -469,6 +476,15 @@ export class GroupsService {
     }
 
     group.currentRound += 1;
+
+    // Clear stale flag when group is updated
+    if (group.staleAt) {
+      group.staleAt = null;
+      this.logger.log(
+        `Cleared stale flag for group ${groupId} during round advance`,
+        'GroupsService',
+      );
+    }
 
     if (group.currentRound > group.totalRounds) {
       group.status = GroupStatus.COMPLETED;

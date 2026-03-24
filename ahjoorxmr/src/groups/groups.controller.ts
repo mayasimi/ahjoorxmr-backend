@@ -112,6 +112,8 @@ export class GroupsController {
    *
    * @param page - Page number (default: 1)
    * @param limit - Items per page (default: 10)
+   * @param includeArchived - Include soft-deleted groups (default: false)
+   * @param filter - Optional filter: 'stale' to return only stale groups
    * @returns Paginated list of groups
    */
   @Get()
@@ -140,6 +142,13 @@ export class GroupsController {
     description: 'Include soft-deleted groups',
     example: false,
   })
+  @ApiQuery({
+    name: 'filter',
+    required: false,
+    type: String,
+    description: 'Filter groups by status (e.g., "stale" for stale groups)',
+    example: 'stale',
+  })
   @ApiResponse({
     status: 200,
     description: 'Successfully retrieved groups',
@@ -150,11 +159,13 @@ export class GroupsController {
     @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number,
     @Query('includeArchived', new DefaultValuePipe(false), ParseBoolPipe)
     includeArchived: boolean,
+    @Query('filter') filter?: string,
   ): Promise<PaginatedGroupsResponseDto> {
     const result = await this.groupsService.findAll(
       page,
       limit,
       includeArchived,
+      filter,
     );
     return {
       data: result.data.map((g) => this.toGroupResponse(g)),
@@ -471,6 +482,7 @@ export class GroupsController {
       totalRounds: group.totalRounds,
       createdAt: group.createdAt.toISOString(),
       updatedAt: group.updatedAt.toISOString(),
+      staleAt: group.staleAt ? group.staleAt.toISOString() : null,
     };
 
     if (includeMembers && group.memberships) {
