@@ -4,6 +4,12 @@ import { Membership } from '../../memberships/entities/membership.entity';
 import { KycStatus } from '../../kyc/entities/kyc-status.enum';
 import { KycDocument } from '../../kyc/entities/kyc-document.entity';
 
+export enum UserRole {
+  ADMIN = 'admin',
+  USER = 'user',
+  MODERATOR = 'moderator',
+}
+
 /**
  * User entity representing a user in the system.
  * Contains authentication, profile, and relationship data.

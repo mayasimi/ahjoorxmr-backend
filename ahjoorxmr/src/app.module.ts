@@ -8,6 +8,7 @@ import { RedisModule } from './common/redis/redis.module';
 import { CacheInterceptor } from './common/interceptors/cache.interceptor';
 import { HealthModule } from './health/health.module';
 import { AuthModule } from './auth/auth.module';
+import { StellarAuthModule } from './stellar-auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { GroupsModule } from './groups/groups.module';
 import { MembershipsModule } from './memberships/memberships.module';
@@ -64,6 +65,7 @@ import { CorrelationIdMiddleware } from './common/middleware/correlation-id.midd
     SchedulerModule,
     HealthModule,
     AuthModule,
+    StellarAuthModule,
     UsersModule,
     GroupsModule,
     MembershipsModule,
