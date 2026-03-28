@@ -173,6 +173,7 @@ export class GroupSyncProcessor extends WorkerHost {
             chainId: job.data.chainId,
           } as SyncGroupStateJobData,
           opts: {
+            jobId: g.id,
             attempts: RETRY_CONFIG.attempts,
             backoff: RETRY_CONFIG.backoff,
           },
