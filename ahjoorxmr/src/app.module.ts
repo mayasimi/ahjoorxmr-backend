@@ -6,6 +6,8 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { RedisModule } from './common/redis/redis.module';
 import { CacheInterceptor } from './common/interceptors/cache.interceptor';
+import { PiiScrubbingInterceptor } from './common/interceptors/pii-scrubbing.interceptor';
+import { WinstonLogger } from './common/logger/winston.logger';
 import { HealthModule } from './health/health.module';
 import { AuthModule } from './auth/auth.module';
 import { StellarAuthModule } from './stellar-auth/auth.module';
@@ -89,6 +91,11 @@ import { CorrelationIdMiddleware } from './common/middleware/correlation-id.midd
   controllers: [AppController],
   providers: [
     AppService,
+    WinstonLogger,
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: PiiScrubbingInterceptor,
+    },
     {
       provide: APP_INTERCEPTOR,
       useClass: CacheInterceptor,

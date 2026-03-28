@@ -18,6 +18,7 @@ import { User } from '../users/entities/user.entity';
 import { NotificationsService } from '../notification/notifications.service';
 import { NotificationType } from '../notification/notification-type.enum';
 import { WinstonLogger } from '../common/logger/winston.logger';
+import { scrubForLog } from '../common/pii/pii-scrubber';
 
 const KYC_MAX_SIZE = 5 * 1024 * 1024; // 5 MB
 const KYC_ALLOWED_MIME = ['image/jpeg', 'image/png', 'application/pdf'];
@@ -102,8 +103,16 @@ export class KycService {
       body: 'Your KYC document has been submitted and is pending review.',
     });
 
+    // Scrub any PII from the log payload before emission
+    const safeDoc = scrubForLog({
+      userId,
+      storageKey,
+      mimeType: file.mimetype,
+      fileSize: file.size,
+      originalName: file.originalname,
+    });
     this.logger.log(
-      `KYC document uploaded for user ${userId}: ${storageKey}`,
+      `KYC document uploaded: ${JSON.stringify(safeDoc)}`,
       'KycService',
     );
 
